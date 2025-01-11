@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Map with Suggestions</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map { height: 600px; } /* Map container height */
+        #searchBar { z-index: 1000; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 50%; }
+        #suggestionList { z-index: 1001; position: absolute; top: 50px; left: 50%; transform: translateX(-50%); width: 50%; background: white; border: 1px solid #ccc; max-height: 200px; overflow-y: auto; display: none; }
+        #suggestionList li { padding: 5px 10px; cursor: pointer; }
+        #suggestionList li:hover { background: #eee; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 class="text-center mt-5">Map with Search Suggestions</h1>
+    <div id="map" class="border rounded"></div>
+</div>
+
+<!-- Search Bar -->
+<div id="searchBar" class="input-group">
+    <input type="text" id="searchInput" class="form-control" placeholder="Search location (e.g., Jakarta)" oninput="showSuggestions()">
+    <button class="btn btn-primary" onclick="searchLocation()">Search</button>
+</div>
+<ul id="suggestionList" class="list-group"></ul>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+    // Initialize the map
+    var map = L.map('map').setView([-6.2, 106.8], 13); // Center to Jakarta
+    var currentLayer;
+
+    // Map tile layers
+    var layers = {
+        streets: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map),
+        satellite: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenTopoMap contributors'
+        })
+    };
+
+    currentLayer = layers.streets;
+
+    // Store markers in an array
+    var markers = [];
+
+    // Function to clear all markers
+    function clearMarkers() {
+        markers.forEach(marker => map.removeLayer(marker)); // Remove each marker
+        markers = []; // Clear the array
+    }
+
+    // Function to locate user
+    function locateUser() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function (position) {
+                    var userLat = position.coords.latitude;
+                    var userLng = position.coords.longitude;
+                    map.setView([userLat, userLng], 15);
+                    var userMarker = L.marker([userLat, userLng]).addTo(map)
+                        .bindPopup('You are here 🧍‍♂️')
+                        .openPopup();
+                    markers.push(userMarker);
+                },
+                function (error) {
+                    alert('Geolocation failed: ' + error.message);
+                }
+            );
+        } else {
+            alert('Geolocation is not supported by your browser.');
+        }
+    }
+
+    // Function to change map style
+    function changeMapStyle() {
+        var style = document.getElementById('mapStyle').value;
+        map.removeLayer(currentLayer);
+        currentLayer = layers[style];
+        currentLayer.addTo(map);
+    }
+
+    // Show suggestions while typing
+    function showSuggestions() {
+        var query = document.getElementById('searchInput').value;
+        var suggestionList = document.getElementById('suggestionList');
+        if (query.length < 3) {
+            suggestionList.style.display = 'none';
+            suggestionList.innerHTML = '';
+            return;
+        }
+
+        fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json`)
+            .then(response => response.json())
+            .then(data => {
+                suggestionList.innerHTML = '';
+                if (data.length > 0) {
+                    suggestionList.style.display = 'block';
+                    data.forEach(location => {
+                        var li = document.createElement('li');
+                        li.textContent = location.display_name;
+                        li.className = 'list-group-item';
+                        li.onclick = function () {
+                            addMarker(location.lat, location.lon, location.display_name);
+                            suggestionList.style.display = 'none';
+                            document.getElementById('searchInput').value = location.display_name;
+                        };
+                        suggestionList.appendChild(li);
+                    });
+                } else {
+                    suggestionList.style.display = 'none';
+                }
+            })
+            .catch(error => console.error('Error fetching suggestions:', error));
+    }
+
+    // Add marker to map
+    function addMarker(lat, lon, name) {
+        map.setView([lat, lon], 15);
+        var marker = L.marker([lat, lon]).addTo(map)
+            .bindPopup(`Search Result: ${name}`)
+            .openPopup();
+        markers.push(marker);
+    }
+
+    // Function to search for a location (fallback for the button)
+    function searchLocation() {
+        var query = document.getElementById('searchInput').value;
+        fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.length > 0) {
+                    var lat = data[0].lat;
+                    var lon = data[0].lon;
+                    addMarker(lat, lon, data[0].display_name);
+                } else {
+                    alert('Location not found.');
+                }
+            })
+            .catch(error => alert('Error searching location: ' + error));
+    }
+</script>
+</body>
+</html>
